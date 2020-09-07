@@ -13,6 +13,7 @@ import csv
 import string
 import codecs
 import re
+import time
 import MeCab
 import pandas as pd
 import numpy as np
@@ -20,8 +21,8 @@ import numpy as np
 #MeCab Tokenizer
 def mecab_tokenizer(tx, sw):
     token_list = []
-    #tagger = MeCab.Tagger('/usr/local/lib/mecab/dic/mecab-ipadic-neologd')
-    tagger = MeCab.Tagger('/usr/local/lib/mecab/dic/ipadic')
+    tagger = MeCab.Tagger('/usr/local/lib/mecab/dic/mecab-ipadic-neologd')
+    #tagger = MeCab.Tagger('/usr/local/lib/mecab/dic/ipadic')
     tagger.parse('')
     node = tagger.parseToNode(tx)
     while node:
@@ -93,7 +94,7 @@ def ft_vectorizer(tx, bsn):
         print("Pre-trained model " + model_path + " is used.")
         model = fasttext.load_model(model_path)
     
-    ft_vec = np.zeros((df_len.shape[0], 300))
+    ft_vec = np.zeros((df.shape[0], 300))
     #Prepairing an empty list for model coverage rate
     coverage = []
     #Caluculating average of the vector of words by a document
@@ -130,7 +131,7 @@ def w2v_vectorizer(tx, bsn):
     #Loading Word2Vec model. Arrange name of the model when you use an existing model.
     model = models.word2vec.Word2Vec.load(model_file)
     #Initializing a 300-dimension data-frame
-    w2v_vec = np.zeros((df_len.shape[0], 300))
+    w2v_vec = np.zeros((df.shape[0], 300))
     #Prepairing an empty list for model coverage rate
     coverage = []
     #Caluculating average of the vector of words by a document
@@ -180,9 +181,12 @@ else:
     print('Stopword file is not found. This process continues without stopwords.')
     stopwords = []
 
+#start time count
+start_time = time.time()
+
 #Combine two columns into a new column
-df['text'] = df['title'].str.cat(df['description'], sep=' | ', na_rep=' - ')
-#df['text'] = df['txt'].str.cat(df['goal'], sep=' | ', na_rep=' - ')
+df['txt'] = df['title'].str.cat(df['description'], sep=' | ', na_rep=' - ')
+df['text'] = df['txt'].str.cat(df['research_keywords'], sep=' | ', na_rep=' - ')
 
 #Selecting Japanese(MeCab) or English(NLTK) based tokenizer
 text_tokenizer = mecab_tokenizer
@@ -201,13 +205,9 @@ df['text_clean'] = df.text_clean.map(lambda x: re.sub(r'[「」。、,（）%#\
 df['text_clean'] = df.text_clean.map(lambda x: x.lower())
 #Creating DataFrame for Token-list
 df['text_tokens'] = df.text_clean.map(lambda x: text_tokenizer(x, stopwords))
-#Creating DataFrame for Token-list
-df['length'] = df.text_tokens.str.len()
-df_len = df[lambda df: df.length >= 20]
-print("Processing data size : " + str(len(df_len)))
 
 #Creating dictionary and corpus
-texts = df_len['text_tokens'].values
+texts = df['text_tokens'].values
 dictionary = corpora.Dictionary(texts)
 dictionary.filter_extremes(no_below=3, no_above=0.4)
 corpus = [dictionary.doc2bow(text) for text in texts]
@@ -216,18 +216,24 @@ corpus = [dictionary.doc2bow(text) for text in texts]
 tfidf_model = models.TfidfModel(corpus, id2word=dictionary.token2id, normalize=False)
 tfidf_corpus = list(tfidf_model[corpus])
 
+mid_time_preprocessing = time.time()
+mid_time_01 = mid_time_preprocessing - start_time
+print("time record for preprocessing is " + str(mid_time_01))
+
 if method == "1":
     method_name = "LDA"
     doc_vec = lda_vectorizer(tfidf_corpus, dictionary, base_name)
 elif method == "2":
     method_name = "FT"
-    doc_vec = ft_vectorizer(df_len['text_tokens'], base_name)
+    doc_vec = ft_vectorizer(df['text_tokens'], base_name)
 elif method == "3":
     method_name = "W2V"
-    doc_vec = w2v_vectorizer(df_len['text_tokens'], base_name)
+    doc_vec = w2v_vectorizer(df['text_tokens'], base_name)
 else:
     print('Program cancelled due to invalid input. Please enter 1, 2 or 3.')
     sys.exit()
+
+resume_time_vectorizing = time.time()
 
 tfidf_texts = []
 for doc in tfidf_corpus:
@@ -249,19 +255,29 @@ for i in range(len(tfidf_texts)):
 #Storing in DataFrame
 embedding_u = umap.UMAP(min_dist=0.1, n_neighbors=50, metric='euclidean', spread=1.0).fit_transform(doc_vec)
 embedding = pd.DataFrame(embedding_u, columns=['x', 'y'])
-embedding['id'] = df_len.id
-embedding['title'] = df_len.title
+embedding['num_id'] = df.num_id
+embedding['doc_id'] = df.doc_id
+embedding['title'] = df.title
+embedding['research_keywords'] = df.research_keywords
 embedding['keywords'] = fword_list
-embedding['year'] = df_len.year
-embedding['author'] = df_len.author
-embedding['affiliation'] = df_len.affiliation
-embedding['grant'] = df_len.grant
-embedding['grade'] = df_len.grade
-embedding['category01'] = df_len.category01
-embedding['category02'] = df_len.category02
+embedding['project_period'] = df.project_period
+embedding['start_year'] = df.start_year
+embedding['main_researcher'] = df.main_researcher
+embedding['co_researcher'] = df.co_researcher
+embedding['other_members'] = df.other_members
+embedding['affiliation'] = df.affiliation
+embedding['review_section'] = df.review_section
+embedding['research_section'] = df.research_section
+embedding['research_category'] = df.research_category
+embedding['total_grant'] = df.total_grant
+embedding['rating'] = df.rating
 
 x_coord = embedding_u[:, 0]
 y_coord = embedding_u[:, 1]
+
+mid_time_vectorizing = time.time()
+mid_time_02 = mid_time_vectorizing - resume_time_vectorizing
+print("time record for vectorizing is " + str(mid_time_02))
 
 #clustering
 clst_input = input('Input the number for min-size of a cluster (default=100) >> ')
@@ -279,6 +295,8 @@ elif type_input == "2":
 else:
     type_c = 'leaf' #set default value
     print("Type of clustering is set as leaf due to invalid input.")
+
+resume_time_labelling = time.time()
 
 clustering = hdbscan.HDBSCAN(cluster_selection_method=type_c, min_cluster_size=clusters, min_samples=10) #The lower the value, the less noise you’ll get
 log_method = "HDBSCAN (minimum size of clusters: " + str(clusters) + " )"
@@ -309,7 +327,7 @@ print(log_label) #display the number of labels and outliers
 
 #Create DataFrame of ID and Label No
 embedding_L1 = pd.DataFrame()
-embedding_L1["id"] = df_len.id
+embedding_L1["id"] = df.num_id
 embedding_L1["keywords"] = fword_list
 embedding_L1["X"] = x_coord
 embedding_L1["Y"] = y_coord
@@ -368,3 +386,11 @@ with open("03_processing/" + base_name + "_by" + method_name + "_" + log_file, '
 label_name = "label_" + str(num_labels) + ".tsv"
 with open("03_processing/" + base_name + "_by" + method_name + "_" + label_name, 'w', encoding="utf_8") as t:
     t.write("\n".join(label_list))
+
+mid_time_labelling = time.time()
+mid_time_03 = mid_time_labelling - resume_time_labelling
+print("time record for labelling is " + str(mid_time_03))
+
+print("All process is finished.")
+#mid_time_01 : preprocessing / mid_time_02 : vectorizing / mid_time_03 : labelling 
+print("Total time : " + str(mid_time_01 + mid_time_02 + mid_time_03))
