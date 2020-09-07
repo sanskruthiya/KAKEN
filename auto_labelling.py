@@ -62,7 +62,7 @@ print(log_label) #display the number of labels and outliers
 
 #Create DataFrame of ID and Label No
 embedding = pd.DataFrame()
-embedding["id"] = df["id"]
+embedding["id"] = df["num_id"]
 embedding["keywords"] = df["keywords"]
 embedding["X"] = df["x"]
 embedding["Y"] = df["y"]

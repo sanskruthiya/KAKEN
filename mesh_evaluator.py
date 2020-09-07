@@ -51,92 +51,62 @@ max_X = df_xy["x"].max()
 min_Y = df_xy["y"].min()
 max_Y = df_xy["y"].max()
 
-avglen = (2 * ((max_X - min_X) / (mesh_qt - 1)) + 2 * ((max_Y - min_Y) / (mesh_qt - 1)) + 4 * ((((max_X - min_X) / (mesh_qt - 1)) **2 + ((max_Y - min_Y) / (mesh_qt - 1)) ** 2) ** 0.5)) / 8
-
-#generating mesh centroid points
+#generating hex-grid centroid points
 x_coord = []
 y_coord = []
-for i in range(mesh_qt):
-    s = min_X + (((max_X - min_X) / (mesh_qt - 1)) * i)
-    for j in range(mesh_qt):
-        t = min_Y + (((max_Y - min_Y) / (mesh_qt - 1)) * j)
+x_side = ((max_X - min_X) / (mesh_qt - 1)) #x軸方向へのオフセット距離
+a_side = 2/3 * x_side #正六角形の重心から各点への距離
+y_side = (a_side * np.sqrt(3)) #y軸方向へのオフセット距離
+mesh_count = 0
+s_count = -1
+for i in range(mesh_qt+2): #指定したメッシュ個数分の繰り返し(前後2回分を多くカバーするため＋２) 
+    s = min_X + (x_side * (i-1)) #x座標は順番に打つ、ただしx_side一回分は初期値としてオフセットする
+    s_count += 1 #x軸方向に何列目にいるのかを把握
+    t = min_Y - y_side if s_count % 2 == 0 else min_Y - (y_side * 0.5) #initial Y coordinate
+    while t < max_Y + y_side: #打った点のY座標値が上限を超えるまで繰り返し
         x_coord.append(s)
         y_coord.append(t)
+        t += y_side
+        mesh_count += 1
 
 df_mesh_id = pd.DataFrame()
-df_mesh_id['mesh_id'] = pd.RangeIndex(start=0, stop=mesh_qt**2, step=1)
-print("The number of mesh :" + str(len(df_mesh_id)))
+df_mesh_id['mesh_id'] = pd.RangeIndex(start=0, stop=mesh_count, step=1)
+print("The number of mesh :" + str(mesh_count+1))
 df_mesh_id["x"] = x_coord
 df_mesh_id["y"] = y_coord
 
 count_density_all = []
 count_density_wt = []
-count_density_200105 = []
-count_density_wt200105 = []
-count_density_200610 = []
-count_density_wt200610 = []
-count_density_201115 = []
-count_density_wt201115 = []
-count_density_201620 = []
-count_density_wt201620 = []
+count_density_201720 = []
+count_density_wt201720 = []
 
-#qcut_len = round(len(df_xy["budget"]) / 10)
-#df_xy["wt"] = pd.qcut(df_xy["budget"], qcut_len, labels=False, duplicates='drop') * 10
-#df_xy["wt"] = df_xy["budget"].round().astype(str).str.len() - 2
-df_xy["wt"] = np.sqrt(df_xy["budget"])
-print(df_xy["wt"])
-df_xy["cnt_200105"] = np.where((df_xy[year_column] >= 2001) & (df_xy[year_column] <= 2005), 1, 0)
-df_xy["cnt_200610"] = np.where((df_xy[year_column] >= 2006) & (df_xy[year_column] <= 2010), 1, 0)
-df_xy["cnt_201115"] = np.where((df_xy[year_column] >= 2011) & (df_xy[year_column] <= 2015), 1, 0)
-df_xy["cnt_201620"] = np.where((df_xy[year_column] >= 2016) & (df_xy[year_column] <= 2020), 1, 0)
+df_xy["wt"] = np.sqrt(df_xy["total_grant"])
+df_xy["cnt_201720"] = np.where((df_xy[year_column] >= 2017) & (df_xy[year_column] <= 2020), 1, 0)
 
 for i in range(len(df_mesh_id)):
     mesh_x = df_mesh_id["x"][i]
     mesh_y = df_mesh_id["y"][i]
-    mesh_dist = ((1 + (((df_xy["x"] - mesh_x)**2 + (df_xy["y"] - mesh_y) ** 2) ** 0.5) / avglen) ** d_cost)
+    mesh_dist = ((1 + (((df_xy["x"] - mesh_x) ** 2 + (df_xy["y"] - mesh_y) ** 2) ** 0.5) / a_side) ** d_cost)
 
-    #df_cnt = df_xy["count"]  / mesh_dist
     df_cnt_all = 1  / mesh_dist
     df_cnt_all_wt = df_xy["wt"] / mesh_dist
-    df_cnt_200105 = df_xy["cnt_200105"] / mesh_dist
-    df_cnt_200105_wt = (df_xy["cnt_200105"] * df_xy["wt"]) / mesh_dist
-    df_cnt_200610 = df_xy["cnt_200610"] / mesh_dist
-    df_cnt_200610_wt = (df_xy["cnt_200610"] * df_xy["wt"]) / mesh_dist
-    df_cnt_201115 = df_xy["cnt_201115"] / mesh_dist
-    df_cnt_201115_wt = (df_xy["cnt_201115"] * df_xy["wt"]) / mesh_dist
-    df_cnt_201620 = df_xy["cnt_201620"] / mesh_dist
-    df_cnt_201620_wt = (df_xy["cnt_201620"] * df_xy["wt"]) / mesh_dist
-
-    #df_density = df_cnt_all.sum()
+    df_cnt_201720 = df_xy["cnt_201720"] / mesh_dist
+    df_cnt_201720_wt = (df_xy["cnt_201720"] * df_xy["wt"]) / mesh_dist
 
     count_density_all.append(df_cnt_all.sum())
     count_density_wt.append(df_cnt_all_wt.sum())
-    count_density_200105.append(df_cnt_200105.sum())
-    count_density_wt200105.append(df_cnt_200105_wt.sum())
-    count_density_200610.append(df_cnt_200610.sum())
-    count_density_wt200610.append(df_cnt_200610_wt.sum())
-    count_density_201115.append(df_cnt_201115.sum())
-    count_density_wt201115.append(df_cnt_201115_wt.sum())
-    count_density_201620.append(df_cnt_201620.sum())
-    count_density_wt201620.append(df_cnt_201620_wt.sum())
+    count_density_201720.append(df_cnt_201720.sum())
+    count_density_wt201720.append(df_cnt_201720_wt.sum())
 
     sys.stdout.write("\r%d/%d is done." % (i+1, len(df_mesh_id)))
 
-#name_col_wt = "density_" + col_wt
+#
 df_mesh_id["density_all"] = pd.cut(count_density_all, 20, labels=False, include_lowest=False, duplicates='drop')
 df_mesh_id["density_all_wt"] = pd.cut(count_density_wt, 20, labels=False, include_lowest=False, duplicates='drop')
-df_mesh_id["density_200105"] = pd.cut(count_density_200105, 20, labels=False, include_lowest=False, duplicates='drop')
-df_mesh_id["density_200105_wt"] = pd.cut(count_density_wt200105, 20, labels=False, include_lowest=False, duplicates='drop')
-df_mesh_id["density_200610"] = pd.cut(count_density_200610, 20, labels=False, include_lowest=False, duplicates='drop')
-df_mesh_id["density_200610_wt"] = pd.cut(count_density_wt200610, 20, labels=False, include_lowest=False, duplicates='drop')
-df_mesh_id["density_201115"] = pd.cut(count_density_201115, 20, labels=False, include_lowest=False, duplicates='drop')
-df_mesh_id["density_201115_wt"] = pd.cut(count_density_wt201115, 20, labels=False, include_lowest=False, duplicates='drop')
-df_mesh_id["density_201620"] = pd.cut(count_density_201620, 20, labels=False, include_lowest=False, duplicates='drop')
-df_mesh_id["density_201620_wt"] = pd.cut(count_density_wt201620, 20, labels=False, include_lowest=False, duplicates='drop')
+df_mesh_id["density_201720"] = pd.cut(count_density_201720, 20, labels=False, include_lowest=False, duplicates='drop')
+df_mesh_id["density_201720_wt"] = pd.cut(count_density_wt201720, 20, labels=False, include_lowest=False, duplicates='drop')
 
-#df_mesh_id.fillna(100)
-
-print("creating mesh-document relations...")
+print("\ncreating mesh-document relations...")
 nearest_point = NearestNeighbors(n_neighbors=1, algorithm='auto', metric='euclidean').fit(df_mesh_id[["x", "y"]].values)
 distances, indices = nearest_point.kneighbors(df_xy[["x", "y"]])
 df_nearest = pd.DataFrame(indices, columns=["mesh_id"])
@@ -152,7 +122,7 @@ mesh_key_y = []
 for i in mesh_uid:
     key_i_list = []
     key_y_list = []
-    recent_flag = str(year_column) + " > 2015" 
+    recent_flag = str(year_column) + " >= 2017" 
     df_key_uid = df_xyn.query("mesh_id == @i")
     df_key_yid = df_key_uid.query(recent_flag)
 
@@ -198,9 +168,9 @@ for i in mesh_uid:
 df_mesh_key = pd.DataFrame()
 df_mesh_key["mesh_id"] = mesh_doc_uid
 df_mesh_key["size"] = mesh_doc_i
-#df_mesh_key["growth_bySize"] = mesh_doc_y
+df_mesh_key["recent_size"] = mesh_doc_y
 df_mesh_key["keywords"] = mesh_key_i
-df_mesh_key["keywords_recent"] = mesh_key_y
+#df_mesh_key["keywords_recent"] = mesh_key_y
 
 df_mesh = pd.merge(df_mesh_id, df_mesh_key, on='mesh_id', how='outer', sort=True)
 
